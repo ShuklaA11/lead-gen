@@ -92,6 +92,7 @@ python -m src.pipeline --enrich --limit 5
 python -m src.pipeline
 
 # Or one stage at a time, reviewing data/enriched.csv between each:
+python -m src.pipeline --find       # only if your list has companies+roles but no names
 python -m src.pipeline --enrich
 python -m src.pipeline --generate
 python -m src.pipeline --draft
@@ -99,6 +100,13 @@ python -m src.pipeline --draft
 
 Flags: `--force` redoes completed steps, `--limit N` processes only the first
 N leads.
+
+**`--find` (discovery):** for lists that name target companies + roles but not
+people. It resolves each company to its Apollo org, searches for the top few
+people matching the role (credit-free), and **appends them as new rows** with
+name + LinkedIn; `--enrich` then reveals their emails. Skip it if your CSV
+already has names. Found rows persist in `data/enriched.csv` across runs, and
+re-running `--find` won't duplicate them.
 
 ## How it stays safe and cheap
 

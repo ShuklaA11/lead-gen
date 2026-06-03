@@ -69,25 +69,46 @@ def run(args: argparse.Namespace) -> None:
 
     # Seed records from input, carrying forward any prior output for each lead.
     records: list[dict] = []
+    input_keys: set[str] = set()
     for lead in leads:
+        key = _key(lead, config)
+        input_keys.add(key)
         record = dict(lead)
-        prior = existing.get(_key(lead, config), {})
+        prior = existing.get(key, {})
         for col in EXTRA_COLUMNS:
             record[col] = prior.get(col, "")
         records.append(record)
 
-    run_all = not (args.enrich or args.generate or args.draft)
+    # Carry forward output-only rows (e.g. people discovered by a prior --find
+    # run) that aren't in the input, so the found set persists across runs.
+    for key, row in existing.items():
+        if key not in input_keys:
+            records.append(dict(row))
+
+    run_all = not (args.find or args.enrich or args.generate or args.draft)
+
+    # --- Stage 0: find people ------------------------------------------------
+    if run_all or args.find:
+        from .find import find_people
+
+        records.extend(find_people(records, config))
+        _write_output(records, original_headers, config)
 
     # --- Stage 1: enrich -----------------------------------------------------
     if run_all or args.enrich:
         from .enrich import enrich_leads
 
-        enrichments = enrich_leads(leads, config)
+        enrichments = enrich_leads(records, config)
         for record, enr in zip(records, enrichments):
-            record["enriched_email"] = enr["email"]
-            record["enriched_linkedin"] = enr["linkedin_url"]
-            record["enriched_title"] = enr["title"]
-            record["enriched_company"] = enr["company_enriched"]
+            # Don't clobber a source row that was fanned out by --find.
+            if str(record.get("apollo_status", "")).startswith("expanded"):
+                continue
+            # Prefer fresh match data, but keep values Find already supplied
+            # (e.g. LinkedIn) when a match comes back sparse.
+            record["enriched_email"] = enr["email"] or record.get("enriched_email", "")
+            record["enriched_linkedin"] = enr["linkedin_url"] or record.get("enriched_linkedin", "")
+            record["enriched_title"] = enr["title"] or record.get("enriched_title", "")
+            record["enriched_company"] = enr["company_enriched"] or record.get("enriched_company", "")
             record["apollo_status"] = enr["apollo_status"]
         _write_output(records, original_headers, config)
 
@@ -105,14 +126,14 @@ def run(args: argparse.Namespace) -> None:
             }
             for r in records
         ]
-        # Skip leads that already have a body unless --force.
-        to_write = list(zip(leads, enr_view, records))
+        # Skip rows that already have a body unless --force. Records are
+        # lead-like dicts, so they double as the "lead" for generation.
         pending_leads, pending_enr, pending_idx = [], [], []
-        for idx, (lead, enr, record) in enumerate(to_write):
+        for idx, record in enumerate(records):
             if record.get("email_body") and not args.force:
                 continue
-            pending_leads.append(lead)
-            pending_enr.append(enr)
+            pending_leads.append(record)
+            pending_enr.append(enr_view[idx])
             pending_idx.append(idx)
 
         if pending_leads:
@@ -158,6 +179,7 @@ def _summary(records: list[dict]) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Lead enrichment + outreach pipeline.")
+    parser.add_argument("--find", action="store_true", help="find people by company+role (Apollo search)")
     parser.add_argument("--enrich", action="store_true", help="run Apollo enrichment")
     parser.add_argument("--generate", action="store_true", help="write outreach emails")
     parser.add_argument("--draft", action="store_true", help="create Gmail drafts")

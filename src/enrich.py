@@ -136,7 +136,9 @@ def enrich_leads(leads: list[dict], config: dict, *, verbose: bool = True) -> li
         if cached is not None:
             results[i] = _empty() if cached.get("_no_match") else _extract(cached)
             continue
-        linkedin = field(lead, config, "linkedin")
+        # Use an input LinkedIn column if present, else a URL that the find
+        # step already discovered — both sharpen the Apollo match.
+        linkedin = field(lead, config, "linkedin") or lead.get("enriched_linkedin", "")
         pending.append((i, _detail(name, company, linkedin), key))
 
     if verbose:
