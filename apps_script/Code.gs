@@ -22,10 +22,13 @@ var CONFIG_SHEET = 'Config';
 var SEGMENTS_SHEET = 'Segments';
 
 var APOLLO_URL = 'https://api.apollo.io/api/v1/people/bulk_match';
+var APOLLO_PEOPLE_SEARCH_URL = 'https://api.apollo.io/api/v1/mixed_people/search';
+var APOLLO_ORG_SEARCH_URL = 'https://api.apollo.io/api/v1/mixed_companies/search';
 var ANTHROPIC_URL = 'https://api.anthropic.com/v1/messages';
 var ANTHROPIC_VERSION = '2023-06-01';
 
 var BATCH_SIZE = 10;                 // Apollo bulk_match max per call
+var FIND_PER_COMPANY = 3;            // how many people to pull per company+title
 var TIME_LIMIT_MS = 5 * 60 * 1000;   // stop before the 6-min Apps Script cap
 
 var OUTPUT_COLUMNS = [
@@ -36,7 +39,7 @@ var OUTPUT_COLUMNS = [
 var COLUMN_ALIASES = {
   name: ['name', 'full name', 'full_name', 'contact', 'contact name'],
   company: ['company', 'organization', 'organisation', 'employer', 'account'],
-  role: ['role', 'job title', 'position'],
+  role: ['role', 'job title', 'position', 'job title/position', 'title/position', 'title'],
   category: ['category', 'segment', 'type', 'list', 'group'],
   linkedin: ['linkedin', 'linkedin url', 'linkedin_url', 'li', 'profile']
 };
@@ -49,15 +52,17 @@ function onOpen() {
     .addItem('Set up workspace', 'setupWorkspace')
     .addItem('Set API keys…', 'setApiKeys')
     .addSeparator()
-    .addItem('1. Enrich (Apollo)', 'enrichLeads')
-    .addItem('2. Generate emails', 'generateEmails')
-    .addItem('3. Create Gmail drafts', 'createDrafts')
+    .addItem('1. Find people (Apollo search)', 'findPeople')
+    .addItem('2. Enrich emails (Apollo)', 'enrichLeads')
+    .addItem('3. Generate emails', 'generateEmails')
+    .addItem('4. Create Gmail drafts', 'createDrafts')
     .addSeparator()
-    .addItem('Run all (1 → 2 → 3)', 'runAll')
+    .addItem('Run all (1 → 2 → 3 → 4)', 'runAll')
     .addToUi();
 }
 
 function runAll() {
+  findPeople();
   enrichLeads();
   generateEmails();
   createDrafts();
@@ -113,6 +118,116 @@ function setApiKeys() {
   toast_('API keys saved.');
 }
 
+// ---- Stage 0: Find people ---------------------------------------------------
+
+/**
+ * For rows that have a company + target role but no person name, search Apollo
+ * for the top matching people and append them as new rows (one per person).
+ * Search is credit-free and returns name + LinkedIn + title but a masked email
+ * — the Enrich step reveals the real email afterward. Rows that already have a
+ * name are left untouched.
+ */
+function findPeople() {
+  var sheet = getLeadsSheet_();
+  var cols = detectColumns_(sheet);
+  var out = ensureOutputColumns_(sheet);
+  if (!cols.company || !cols.role) {
+    toast_('Find people needs a Company column and a Job Title / Role column.');
+    return;
+  }
+
+  var key = getApiKey_('APOLLO_API_KEY');
+  var lastCol = sheet.getLastColumn();
+  var lastRow = sheet.getLastRow();
+  var orgCache = {};
+  var newRows = [];
+  var start = Date.now();
+
+  for (var r = 2; r <= lastRow; r++) {
+    if (timeUp_(start)) { break; }
+    if (cellStr_(sheet, r, cols.name)) continue;                 // already has a person
+    if (cellStr_(sheet, r, out.Status).indexOf('expanded') === 0) continue;  // already searched
+    var company = cellStr_(sheet, r, cols.company);
+    var title = cellStr_(sheet, r, cols.role);
+    if (!company || !title) continue;
+
+    var org = resolveOrg_(company, key, orgCache);
+    var people = searchPeople_(org, title, key);
+    var srcRow = sheet.getRange(r, 1, 1, lastCol).getValues()[0];
+    people.forEach(function (p) {
+      var row = srcRow.slice();
+      row[cols.name - 1] = p.name;
+      row[out['Enriched Title'] - 1] = p.title || title;
+      row[out['Enriched LinkedIn'] - 1] = p.linkedin_url || '';
+      row[out.Email - 1] = '';        // let Enrich reveal it
+      row[out.Subject - 1] = '';
+      row[out.Body - 1] = '';
+      row[out.Draft - 1] = '';
+      row[out.Status - 1] = 'found';
+      newRows.push(row);
+    });
+    sheet.getRange(r, out.Status).setValue('expanded (' + people.length + ')');
+    SpreadsheetApp.flush();
+  }
+
+  if (newRows.length) {
+    sheet.getRange(sheet.getLastRow() + 1, 1, newRows.length, lastCol).setValues(newRows);
+  }
+  toast_('Found ' + newRows.length + ' people. Next: Enrich emails.');
+}
+
+/** Resolve a company name to an Apollo org {id, domain}; cached per run. */
+function resolveOrg_(name, key, cache) {
+  if (cache[name] !== undefined) return cache[name];
+  var resp = UrlFetchApp.fetch(APOLLO_ORG_SEARCH_URL, {
+    method: 'post',
+    contentType: 'application/json',
+    headers: { 'X-Api-Key': key, 'Accept': 'application/json', 'Cache-Control': 'no-cache' },
+    payload: JSON.stringify({ q_organization_name: name, per_page: 1 }),
+    muteHttpExceptions: true
+  });
+  var org = null;
+  if (resp.getResponseCode() < 300) {
+    var data = JSON.parse(resp.getContentText());
+    var list = data.organizations || data.accounts || [];
+    if (list.length) org = { id: list[0].id || '', domain: list[0].primary_domain || '' };
+  }
+  cache[name] = org;
+  return org;
+}
+
+/** Search people by title within an org. Returns [{name, title, linkedin_url}]. */
+function searchPeople_(org, title, key) {
+  var body = {
+    person_titles: [title],
+    include_similar_titles: true,
+    page: 1,
+    per_page: FIND_PER_COMPANY
+  };
+  if (org && org.id) body.organization_ids = [org.id];
+  else if (org && org.domain) body.q_organization_domains_list = [org.domain];
+  else return [];   // couldn't identify the company — skip rather than search the whole world
+
+  var resp = UrlFetchApp.fetch(APOLLO_PEOPLE_SEARCH_URL, {
+    method: 'post',
+    contentType: 'application/json',
+    headers: { 'X-Api-Key': key, 'Accept': 'application/json', 'Cache-Control': 'no-cache' },
+    payload: JSON.stringify(body),
+    muteHttpExceptions: true
+  });
+  if (resp.getResponseCode() >= 300) {
+    throw new Error('Apollo search error ' + resp.getResponseCode() + ': ' + resp.getContentText().slice(0, 300));
+  }
+  var people = JSON.parse(resp.getContentText()).people || [];
+  return people.map(function (p) {
+    return {
+      name: p.name || ((p.first_name || '') + ' ' + (p.last_name || '')).trim(),
+      title: p.title || '',
+      linkedin_url: p.linkedin_url || ''
+    };
+  }).filter(function (p) { return p.name; });
+}
+
 // ---- Stage 1: Enrich --------------------------------------------------------
 
 function enrichLeads() {
@@ -132,7 +247,7 @@ function enrichLeads() {
       detail: buildDetail_(
         name,
         cols.company ? cellStr_(sheet, r, cols.company) : '',
-        cols.linkedin ? cellStr_(sheet, r, cols.linkedin) : ''
+        cols.linkedin ? cellStr_(sheet, r, cols.linkedin) : cellStr_(sheet, r, out['Enriched LinkedIn'])
       )
     });
   }
@@ -355,6 +470,13 @@ function detectColumns_(sheet) {
       if (lower[aliases[k]]) { out[concept] = lower[aliases[k]]; break; }
     }
   });
+  // Fallback for role: match any header mentioning title/position/role (handles
+  // decorated headers like "Job Title / Position").
+  if (!out.role) {
+    Object.keys(lower).forEach(function (h) {
+      if (!out.role && /\b(title|position|role)\b/.test(h)) out.role = lower[h];
+    });
+  }
   if (!out.name) throw new Error('Could not find a Name column in the "' + sheet.getName() + '" tab.');
   return out;
 }

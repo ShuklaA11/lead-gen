@@ -148,10 +148,21 @@ sheet's **Outreach** menu.
 
 From the **Outreach** menu, in order:
 
-1. **Enrich (Apollo)** — fills Email, Enriched Title, Enriched LinkedIn.
-2. **Generate emails** — writes Subject + Body per lead.
-3. **Create Gmail drafts** — one draft per lead; review in Gmail → Drafts.
+1. **Find people (Apollo search)** — *only needed if your list has companies +
+   target roles but no people named yet.* For each company+role row it finds the
+   top few matching people and appends them as new rows (name + LinkedIn). Skip
+   this step if your sheet already has names.
+2. **Enrich emails (Apollo)** — reveals Email (and fills Enriched Title /
+   LinkedIn) for each named lead.
+3. **Generate emails** — writes Subject + Body per lead.
+4. **Create Gmail drafts** — one draft per lead; review in Gmail → Drafts.
 
 Or **Run all**. Every step skips rows already done, so if a run hits Apps
 Script's 6-minute limit you just click it again to continue. Nothing is ever
 sent automatically.
+
+> **Find vs. Enrich:** *Find* answers "who are the people in this role at this
+> company?" (search by company + title — free, returns names + LinkedIn).
+> *Enrich* answers "what's this known person's email?" (match by name — costs
+> credits, reveals the email). A name-less target list needs Find first; a list
+> that already has names goes straight to Enrich.
