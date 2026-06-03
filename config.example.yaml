@@ -1,0 +1,60 @@
+# Example config. Run `python -m src.setup` to generate your own config.yaml
+# interactively, or copy this file to config.yaml and edit by hand.
+# config.yaml is gitignored (it holds your campaign content).
+
+# --- Files -------------------------------------------------------------------
+input_csv: data/input.csv      # your lead list
+output_csv: data/enriched.csv  # pipeline writes results here
+
+# --- CSV column mapping ------------------------------------------------------
+# Which header in your CSV maps to each concept. The setup wizard auto-detects
+# these from common names; override here if your headers differ.
+columns:
+  name: Name
+  company: Company
+  role: Role
+  category: Category   # used to pick a per-segment angle; leave blank if none
+  linkedin: Linkedin   # existing LinkedIn URLs improve Apollo match accuracy
+
+# --- What you're offering ----------------------------------------------------
+product:
+  description: >
+    One or two sentences describing your product/offer. This grounds every
+    email so they don't read as generic.
+
+# --- Who the email is from ---------------------------------------------------
+sender:
+  name: Jane Doe
+  email: jane@example.com
+  signature: |
+    Jane Doe
+    Founder, Example Co
+    https://example.com
+  booking_link: ""   # optional: a Calendly/Cal.com link the email can offer
+
+# --- Outreach angle per segment ----------------------------------------------
+# Keys must match the values found in your `category` column. The wizard
+# pre-fills one entry per distinct category it finds in your CSV.
+segments:
+  Affiliate/Media:
+    angle: >
+      Why affiliate and media contacts specifically should care about the offer.
+  FI:
+    angle: >
+      Why financial-institution contacts specifically should care.
+
+# Used for leads whose category is empty or not listed above.
+default_angle: >
+  A general value proposition that works for anyone on the list.
+
+# --- Email generation --------------------------------------------------------
+generation:
+  model: claude-opus-4-8   # claude-sonnet-4-6 is cheaper/faster if preferred
+  max_tokens: 1024
+  tone: warm, concise, professional, not salesy
+  word_limit: 120          # keep cold emails short
+
+# --- Apollo enrichment -------------------------------------------------------
+apollo:
+  reveal_personal_emails: true
+  batch_size: 10           # Apollo bulk_match max is 10 per call

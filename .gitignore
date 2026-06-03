@@ -1,0 +1,26 @@
+# Secrets & credentials
+.env
+credentials.json
+token.json
+
+# Local config & campaign data (content-specific, not for the repo)
+config.yaml
+data/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+
+# Private working docs (per personal workflow rules)
+CLAUDE.md
+plan.md
+plan-*.md
+PLAN.md
+planning.md
+plans/
+
+# OS
+.DS_Store
