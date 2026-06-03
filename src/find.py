@@ -29,25 +29,37 @@ def _headers(api_key: str) -> dict:
     }
 
 
+def _api_error(action: str, resp) -> SystemExit:
+    hint = ""
+    if resp.status_code in (401, 403):
+        hint = (
+            " Apollo's People/Company Search API requires a MASTER API key — "
+            "generate one in Apollo (Settings > Integrations > API, 'Create new "
+            "key' with master access) and put it in .env as APOLLO_API_KEY."
+        )
+    return SystemExit(f"Apollo {action} failed ({resp.status_code}).{hint} {resp.text[:200]}")
+
+
 def _resolve_org(name: str, api_key: str, cache: dict) -> dict | None:
-    """Resolve a company name to an Apollo org {id, domain}; cached per run."""
+    """Resolve a company name to an Apollo org {id, domain}; cached per run.
+
+    Returns None only when the company genuinely isn't found (HTTP 200, no
+    match). HTTP errors are raised so auth/plan problems aren't hidden.
+    """
     if name in cache:
         return cache[name]
-    org: dict | None = None
     resp = requests.post(
         ORG_SEARCH_URL,
         headers=_headers(api_key),
         json={"q_organization_name": name, "per_page": 1},
         timeout=REQUEST_TIMEOUT,
     )
-    if resp.ok:
-        data = resp.json()
-        listing = data.get("organizations") or data.get("accounts") or []
-        if listing:
-            org = {
-                "id": listing[0].get("id") or "",
-                "domain": listing[0].get("primary_domain") or "",
-            }
+    if not resp.ok:
+        raise _api_error("company search", resp)
+    listing = resp.json().get("organizations") or resp.json().get("accounts") or []
+    org = None
+    if listing:
+        org = {"id": listing[0].get("id") or "", "domain": listing[0].get("primary_domain") or ""}
     cache[name] = org
     return org
 
@@ -70,7 +82,8 @@ def _search_people(org: dict | None, title: str, api_key: str) -> list[dict]:
     resp = requests.post(
         PEOPLE_SEARCH_URL, headers=_headers(api_key), json=body, timeout=REQUEST_TIMEOUT
     )
-    resp.raise_for_status()
+    if not resp.ok:
+        raise _api_error("people search", resp)
     people = resp.json().get("people") or []
     out: list[dict] = []
     for p in people:

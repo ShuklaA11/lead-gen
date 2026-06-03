@@ -176,7 +176,21 @@ function findPeople() {
   toast_('Found ' + newRows.length + ' people. Next: Enrich emails.');
 }
 
-/** Resolve a company name to an Apollo org {id, domain}; cached per run. */
+/** Build a clear error, flagging the master-key requirement on 401/403. */
+function apolloError_(action, code, body) {
+  var hint = (code === 401 || code === 403)
+    ? " Apollo's People/Company Search API requires a MASTER API key — generate one in" +
+      " Apollo (Settings > Integrations > API, create a key with master access) and re-run" +
+      ' "Set API keys".'
+    : '';
+  return new Error('Apollo ' + action + ' failed (' + code + ').' + hint + ' ' + String(body).slice(0, 200));
+}
+
+/**
+ * Resolve a company name to an Apollo org {id, domain}; cached per run.
+ * Returns null only on a genuine no-match (HTTP 200); HTTP errors are thrown so
+ * auth/plan problems surface instead of silently yielding zero results.
+ */
 function resolveOrg_(name, key, cache) {
   if (cache[name] !== undefined) return cache[name];
   var resp = UrlFetchApp.fetch(APOLLO_ORG_SEARCH_URL, {
@@ -186,12 +200,11 @@ function resolveOrg_(name, key, cache) {
     payload: JSON.stringify({ q_organization_name: name, per_page: 1 }),
     muteHttpExceptions: true
   });
-  var org = null;
-  if (resp.getResponseCode() < 300) {
-    var data = JSON.parse(resp.getContentText());
-    var list = data.organizations || data.accounts || [];
-    if (list.length) org = { id: list[0].id || '', domain: list[0].primary_domain || '' };
-  }
+  var code = resp.getResponseCode();
+  if (code >= 300) throw apolloError_('company search', code, resp.getContentText());
+  var data = JSON.parse(resp.getContentText());
+  var list = data.organizations || data.accounts || [];
+  var org = list.length ? { id: list[0].id || '', domain: list[0].primary_domain || '' } : null;
   cache[name] = org;
   return org;
 }
@@ -216,7 +229,7 @@ function searchPeople_(org, title, key) {
     muteHttpExceptions: true
   });
   if (resp.getResponseCode() >= 300) {
-    throw new Error('Apollo search error ' + resp.getResponseCode() + ': ' + resp.getContentText().slice(0, 300));
+    throw apolloError_('people search', resp.getResponseCode(), resp.getContentText());
   }
   var people = JSON.parse(resp.getContentText()).people || [];
   return people.map(function (p) {

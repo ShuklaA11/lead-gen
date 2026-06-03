@@ -30,7 +30,9 @@ at the end.
 ## Requirements
 
 - Python 3.10+
-- Apollo.io API key (Professional plan or higher — lower tiers have no API)
+- Apollo.io API key (Professional plan or higher — lower tiers have no API).
+  The **Find people** step needs a **master API key** (enable master access when
+  creating the key); enrichment alone works with a regular key.
 - Anthropic API key
 - A Google account for Gmail drafts
 
