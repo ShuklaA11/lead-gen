@@ -22,7 +22,7 @@ var CONFIG_SHEET = 'Config';
 var SEGMENTS_SHEET = 'Segments';
 
 var APOLLO_URL = 'https://api.apollo.io/api/v1/people/bulk_match';
-var APOLLO_PEOPLE_SEARCH_URL = 'https://api.apollo.io/api/v1/mixed_people/search';
+var APOLLO_PEOPLE_SEARCH_URL = 'https://api.apollo.io/api/v1/mixed_people/api_search';
 var APOLLO_ORG_SEARCH_URL = 'https://api.apollo.io/api/v1/mixed_companies/search';
 var ANTHROPIC_URL = 'https://api.anthropic.com/v1/messages';
 var ANTHROPIC_VERSION = '2023-06-01';

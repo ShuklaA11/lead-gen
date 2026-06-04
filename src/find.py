@@ -14,7 +14,7 @@ import requests
 
 from .config import field, require_env
 
-PEOPLE_SEARCH_URL = "https://api.apollo.io/api/v1/mixed_people/search"
+PEOPLE_SEARCH_URL = "https://api.apollo.io/api/v1/mixed_people/api_search"
 ORG_SEARCH_URL = "https://api.apollo.io/api/v1/mixed_companies/search"
 FIND_PER_COMPANY = 3
 REQUEST_TIMEOUT = 30
