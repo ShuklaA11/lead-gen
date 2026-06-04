@@ -33,9 +33,10 @@ def _api_error(action: str, resp) -> SystemExit:
     hint = ""
     if resp.status_code in (401, 403):
         hint = (
-            " Apollo's People/Company Search API requires a MASTER API key — "
-            "generate one in Apollo (Settings > Integrations > API, 'Create new "
-            "key' with master access) and put it in .env as APOLLO_API_KEY."
+            " Access denied. The Apollo search/enrich APIs require a PAID plan "
+            "(Professional+) — free plans return API_INACCESSIBLE — and People "
+            "Search additionally needs a MASTER API key. Check your plan at "
+            "app.apollo.io and recreate the key (master access) in the paid workspace."
         )
     return SystemExit(f"Apollo {action} failed ({resp.status_code}).{hint} {resp.text[:200]}")
 

@@ -179,9 +179,10 @@ function findPeople() {
 /** Build a clear error, flagging the master-key requirement on 401/403. */
 function apolloError_(action, code, body) {
   var hint = (code === 401 || code === 403)
-    ? " Apollo's People/Company Search API requires a MASTER API key — generate one in" +
-      " Apollo (Settings > Integrations > API, create a key with master access) and re-run" +
-      ' "Set API keys".'
+    ? ' Access denied. The Apollo search/enrich APIs require a PAID plan (Professional+)' +
+      ' — free plans return API_INACCESSIBLE — and People Search additionally needs a' +
+      ' MASTER API key. Check your plan at app.apollo.io, then recreate the key (master' +
+      ' access) in the paid workspace and re-run "Set API keys".'
     : '';
   return new Error('Apollo ' + action + ' failed (' + code + ').' + hint + ' ' + String(body).slice(0, 200));
 }
