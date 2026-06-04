@@ -26,6 +26,7 @@ EXTRA_COLUMNS = [
     "enriched_linkedin",
     "enriched_title",
     "enriched_company",
+    "apollo_id",
     "apollo_status",
     "email_subject",
     "email_body",
@@ -98,11 +99,16 @@ def run(args: argparse.Namespace) -> None:
     if run_all or args.enrich:
         from .enrich import enrich_leads
 
+        name_col = config.get("columns", {}).get("name")
         enrichments = enrich_leads(records, config)
         for record, enr in zip(records, enrichments):
             # Don't clobber a source row that was fanned out by --find.
             if str(record.get("apollo_status", "")).startswith("expanded"):
                 continue
+            # For found rows (matched by Apollo id), upgrade the partial first
+            # name to the revealed full name.
+            if name_col and record.get("apollo_id") and enr.get("name"):
+                record[name_col] = enr["name"]
             # Prefer fresh match data, but keep values Find already supplied
             # (e.g. LinkedIn) when a match comes back sparse.
             record["enriched_email"] = enr["email"] or record.get("enriched_email", "")

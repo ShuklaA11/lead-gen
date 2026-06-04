@@ -32,7 +32,7 @@ var FIND_PER_COMPANY = 3;            // how many people to pull per company+titl
 var TIME_LIMIT_MS = 5 * 60 * 1000;   // stop before the 6-min Apps Script cap
 
 var OUTPUT_COLUMNS = [
-  'Email', 'Enriched Title', 'Enriched LinkedIn', 'Status',
+  'Email', 'Enriched Title', 'Enriched LinkedIn', 'Apollo ID', 'Status',
   'Subject', 'Body', 'Draft'
 ];
 
@@ -156,10 +156,11 @@ function findPeople() {
     var srcRow = sheet.getRange(r, 1, 1, lastCol).getValues()[0];
     people.forEach(function (p) {
       var row = srcRow.slice();
-      row[cols.name - 1] = p.name;
+      row[cols.name - 1] = p.name;            // first name; Enrich upgrades to full name
+      row[out['Apollo ID'] - 1] = p.id;
       row[out['Enriched Title'] - 1] = p.title || title;
       row[out['Enriched LinkedIn'] - 1] = p.linkedin_url || '';
-      row[out.Email - 1] = '';        // let Enrich reveal it
+      row[out.Email - 1] = '';                // let Enrich reveal it
       row[out.Subject - 1] = '';
       row[out.Body - 1] = '';
       row[out.Draft - 1] = '';
@@ -233,13 +234,17 @@ function searchPeople_(org, title, key) {
     throw apolloError_('people search', resp.getResponseCode(), resp.getContentText());
   }
   var people = JSON.parse(resp.getContentText()).people || [];
+  // Search returns partial/obfuscated people (first name + obfuscated last name,
+  // no email/LinkedIn) plus an id. We keep the id and reveal the rest in Enrich.
   return people.map(function (p) {
+    var firstName = p.name || p.first_name || '';
     return {
-      name: p.name || ((p.first_name || '') + ' ' + (p.last_name || '')).trim(),
+      id: p.id || '',
+      name: firstName,             // first name only here; Enrich fills the full name
       title: p.title || '',
       linkedin_url: p.linkedin_url || ''
     };
-  }).filter(function (p) { return p.name; });
+  }).filter(function (p) { return p.id; });
 }
 
 // ---- Stage 1: Enrich --------------------------------------------------------
@@ -254,14 +259,17 @@ function enrichLeads() {
   var pending = [];
   for (var r = 2; r <= lastRow; r++) {
     if (cellStr_(sheet, r, out.Email)) continue;            // already enriched
+    var apolloId = cellStr_(sheet, r, out['Apollo ID']);    // set by Find; exact match
     var name = cellStr_(sheet, r, cols.name);
-    if (!name) continue;
+    if (!apolloId && !name) continue;                       // nothing to match on
     pending.push({
       row: r,
+      apolloId: apolloId,
       detail: buildDetail_(
         name,
         cols.company ? cellStr_(sheet, r, cols.company) : '',
-        cols.linkedin ? cellStr_(sheet, r, cols.linkedin) : cellStr_(sheet, r, out['Enriched LinkedIn'])
+        cols.linkedin ? cellStr_(sheet, r, cols.linkedin) : cellStr_(sheet, r, out['Enriched LinkedIn']),
+        apolloId
       )
     });
   }
@@ -275,9 +283,12 @@ function enrichLeads() {
     for (var j = 0; j < chunk.length; j++) {
       var row = chunk[j].row, p = people[j];
       if (p) {
+        // For found rows (matched by Apollo id), upgrade the partial first name
+        // to the revealed full name.
+        if (chunk[j].apolloId && p.name) sheet.getRange(row, cols.name).setValue(p.name);
         sheet.getRange(row, out.Email).setValue(p.email);
-        sheet.getRange(row, out['Enriched Title']).setValue(p.title);
-        sheet.getRange(row, out['Enriched LinkedIn']).setValue(p.linkedin_url);
+        if (p.title) sheet.getRange(row, out['Enriched Title']).setValue(p.title);
+        if (p.linkedin_url) sheet.getRange(row, out['Enriched LinkedIn']).setValue(p.linkedin_url);
         sheet.getRange(row, out.Status).setValue(p.email ? 'matched' : 'no_email');
       } else {
         sheet.getRange(row, out.Status).setValue('no_match');
@@ -309,6 +320,7 @@ function apolloBulkMatch_(details, key) {
       if (/email_not_unlocked/i.test(email)) email = '';   // Apollo placeholder
       out.push({
         email: email,
+        name: p.name || ((p.first_name || '') + ' ' + (p.last_name || '')).trim(),
         title: p.title || '',
         linkedin_url: p.linkedin_url || '',
         company: p.organization_name || org.name || ''
@@ -533,7 +545,8 @@ function cellStr_(sheet, row, col) {
   return String(sheet.getRange(row, col).getValue()).trim();
 }
 
-function buildDetail_(name, company, linkedin) {
+function buildDetail_(name, company, linkedin, id) {
+  if (id) return { id: id };   // exact match by Apollo person id (from Find)
   var parts = name.split(/\s+/);
   var d = { name: name };
   if (parts.length) {

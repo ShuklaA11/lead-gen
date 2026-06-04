@@ -86,17 +86,20 @@ def _search_people(org: dict | None, title: str, api_key: str) -> list[dict]:
     if not resp.ok:
         raise _api_error("people search", resp)
     people = resp.json().get("people") or []
+    # Search returns partial/obfuscated people (first name + obfuscated last name,
+    # no email/LinkedIn) plus an id. Keep the id; Enrich reveals the rest.
     out: list[dict] = []
     for p in people:
-        name = p.get("name") or f"{p.get('first_name', '')} {p.get('last_name', '')}".strip()
-        if name:
-            out.append(
-                {
-                    "name": name,
-                    "title": p.get("title") or "",
-                    "linkedin_url": p.get("linkedin_url") or "",
-                }
-            )
+        if not p.get("id"):
+            continue
+        out.append(
+            {
+                "id": p["id"],
+                "name": p.get("name") or p.get("first_name") or "",  # first name; enrich fills full
+                "title": p.get("title") or "",
+                "linkedin_url": p.get("linkedin_url") or "",
+            }
+        )
     return out
 
 
@@ -127,7 +130,8 @@ def find_people(records: list[dict], config: dict, *, verbose: bool = True) -> l
         people = _search_people(_resolve_org(company, api_key, org_cache), title, api_key)
         for person in people:
             found = dict(record)  # carry company, role, location, etc.
-            found[name_col] = person["name"]
+            found[name_col] = person["name"]  # first name; enrich upgrades to full name
+            found["apollo_id"] = person["id"]
             found["enriched_title"] = person["title"] or title
             found["enriched_linkedin"] = person["linkedin_url"]
             found["enriched_email"] = ""

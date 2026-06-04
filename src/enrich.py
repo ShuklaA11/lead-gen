@@ -52,7 +52,9 @@ def _split_name(name: str) -> tuple[str, str]:
     return parts[0], " ".join(parts[1:])
 
 
-def _detail(name: str, company: str, linkedin: str) -> dict:
+def _detail(name: str, company: str, linkedin: str, apollo_id: str = "") -> dict:
+    if apollo_id:
+        return {"id": apollo_id}  # exact match by Apollo person id (from find)
     first, last = _split_name(name)
     detail: dict = {"name": name}
     if first:
@@ -71,6 +73,8 @@ def _extract(person: dict) -> dict:
     org = person.get("organization") or {}
     return {
         "email": person.get("email") or "",
+        "name": person.get("name")
+        or f"{person.get('first_name', '')} {person.get('last_name', '')}".strip(),
         "linkedin_url": person.get("linkedin_url") or "",
         "title": person.get("title") or "",
         "company_enriched": person.get("organization_name") or org.get("name") or "",
@@ -81,6 +85,7 @@ def _extract(person: dict) -> dict:
 def _empty() -> dict:
     return {
         "email": "",
+        "name": "",
         "linkedin_url": "",
         "title": "",
         "company_enriched": "",
@@ -126,12 +131,14 @@ def enrich_leads(leads: list[dict], config: dict, *, verbose: bool = True) -> li
 
     # First pass: serve from cache, queue the rest.
     for i, lead in enumerate(leads):
+        apollo_id = lead.get("apollo_id", "")
         name = field(lead, config, "name")
         company = field(lead, config, "company")
-        if not name:
+        if not apollo_id and not name:
             results[i] = _empty()
             continue
-        key = _cache_key(name, company)
+        # Found rows match exactly by Apollo id; otherwise by name+company.
+        key = apollo_id or _cache_key(name, company)
         cached = _load_cached(key)
         if cached is not None:
             results[i] = _empty() if cached.get("_no_match") else _extract(cached)
@@ -139,7 +146,7 @@ def enrich_leads(leads: list[dict], config: dict, *, verbose: bool = True) -> li
         # Use an input LinkedIn column if present, else a URL that the find
         # step already discovered — both sharpen the Apollo match.
         linkedin = field(lead, config, "linkedin") or lead.get("enriched_linkedin", "")
-        pending.append((i, _detail(name, company, linkedin), key))
+        pending.append((i, _detail(name, company, linkedin, apollo_id), key))
 
     if verbose:
         cached_count = len(leads) - len(pending)

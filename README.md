@@ -105,10 +105,10 @@ N leads.
 
 **`--find` (discovery):** for lists that name target companies + roles but not
 people. It resolves each company to its Apollo org, searches for the top few
-people matching the role (credit-free), and **appends them as new rows** with
-name + LinkedIn; `--enrich` then reveals their emails. Skip it if your CSV
-already has names. Found rows persist in `data/enriched.csv` across runs, and
-re-running `--find` won't duplicate them.
+people matching the role (credit-free), and **appends them as new rows**
+capturing each person's Apollo id; `--enrich` then reveals the full name,
+email, and LinkedIn. Skip it if your CSV already has names. Found rows persist
+in `data/enriched.csv` across runs, and re-running `--find` won't duplicate them.
 
 ## How it stays safe and cheap
 
@@ -160,8 +160,9 @@ From the **Outreach** menu, in order:
 
 1. **Find people (Apollo search)** — *only needed if your list has companies +
    target roles but no people named yet.* For each company+role row it finds the
-   top few matching people and appends them as new rows (name + LinkedIn). Skip
-   this step if your sheet already has names.
+   top few matching people and appends them as new rows. (Apollo search returns
+   a partial name + a person id; the Enrich step then reveals the full name,
+   email, and LinkedIn.) Skip this step if your sheet already has names.
 2. **Enrich emails (Apollo)** — reveals Email (and fills Enriched Title /
    LinkedIn) for each named lead.
 3. **Generate emails** — writes Subject + Body per lead.
