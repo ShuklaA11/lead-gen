@@ -130,47 +130,52 @@ in `data/enriched.csv` across runs, and re-running `--find` won't duplicate them
 
 ## Google Sheets edition (for a non-technical user)
 
-Everything above, driven from a Google Sheet — no install, no terminal. The
-code lives in [`apps_script/Code.gs`](apps_script/Code.gs). A technical person
-does the one-time setup below; after that, anyone can run campaigns from the
-sheet's **Outreach** menu.
+The same master-list pipeline, driven from a Google Sheet — no install, no
+terminal. The code lives in [`apps_script/Code.gs`](apps_script/Code.gs). A
+technical person does the one-time setup below; after that, anyone can run it
+from the sheet's **Master List** menu.
 
 ### One-time setup
 
 1. Create a new Google Sheet and paste your leads into a tab named **`Leads`**
-   (row 1 = headers like `Name, Company, Role, Category, Linkedin`).
+   (row 1 = headers like `Name, Company, Role, Linkedin`).
 2. **Extensions → Apps Script.** Delete the placeholder, paste the contents of
    `apps_script/Code.gs`, and save. (Optional: in Project Settings enable
    "Show appsscript.json", then paste `apps_script/appsscript.json`.)
-3. Reload the Sheet. An **Outreach** menu appears.
-4. **Outreach → Set up workspace** — creates `Config` and `Segments` tabs and
-   adds the output columns to `Leads`.
-5. **Outreach → Set API keys** — paste the Apollo and Anthropic keys (stored in
-   Script Properties, not in the sheet).
-6. Fill in the **Config** tab (product, sender name/email, signature, booking
-   link) and the **Segments** tab (one angle per segment — pre-filled from the
-   categories found in your data).
+3. Reload the Sheet. A **Master List** menu appears.
+4. **Master List → Set up workspace** — creates the `Config` tab and adds the
+   working columns to `Leads`.
+5. **Master List → Set API keys** — paste the Apollo and Anthropic keys (stored
+   in Script Properties, not in the sheet).
+6. Fill in the **Config** tab — at minimum the **Campaign Brief** (who you're
+   targeting and what makes a contact High vs Med vs Low). `Company Prefixes`
+   sets the `person_id` prefix per company (e.g. `Navy Federal Credit Union=NFCU`).
 
-> Note: the first run of any step asks for Google permission (Gmail + Sheets).
-> Click through the "unverified app" screen — it's your own script.
+> Note: the first run of any step asks for Google permission (Sheets + web
+> requests, and Gmail only if you use the optional email steps). Click through
+> the "unverified app" screen — it's your own script.
 
-### Running a campaign
+### Running it
 
-From the **Outreach** menu, in order:
+From the **Master List** menu, in order:
 
-1. **Find people (Apollo search)** — *only needed if your list has companies +
-   target roles but no people named yet.* For each company+role row it finds the
-   top few matching people and appends them as new rows. (Apollo search returns
-   a partial name + a person id; the Enrich step then reveals the full name,
-   email, and LinkedIn.) Skip this step if your sheet already has names.
-2. **Enrich emails (Apollo)** — reveals Email (and fills Enriched Title /
-   LinkedIn) for each named lead.
-3. **Generate emails** — writes Subject + Body per lead.
-4. **Create Gmail drafts** — one draft per lead; review in Gmail → Drafts.
+1. **Find people (Apollo search)** — *only if your list has companies + target
+   roles but no people named yet.* Appends the top matching people per
+   company+role as new rows. Skip if your sheet already has names.
+2. **Enrich (Apollo)** — fills name, email, title, **seniority, email status,
+   company phone**, and the Apollo Person ID; assigns `company_id`/`person_id`.
+3. **Research (Claude web search)** — one web-researched profile per person:
+   writes a `top_hook`, a fit-based priority, and flags, stores the full profile
+   in the **`Profiles`** tab, and updates each row's `Source Note` + `Info dump`.
+4. **Build Master List** — (re)builds the clean 15-column **`Master List`** tab.
 
 Or **Run all**. Every step skips rows already done, so if a run hits Apps
-Script's 6-minute limit you just click it again to continue. Nothing is ever
-sent automatically.
+Script's 6-minute limit you just click it again to continue. Research is ~one
+Claude call per person, so very large lists take several re-runs.
+
+**Optional email steps** (`Generate emails`, `Create Gmail drafts`) still work —
+they lead with each person's researched `top_hook` and create Gmail drafts
+(never auto-sent). Fill in the Product/Sender/Signature rows in Config first.
 
 > **Find vs. Enrich:** *Find* answers "who are the people in this role at this
 > company?" (search by company + title — free, returns names + LinkedIn).
