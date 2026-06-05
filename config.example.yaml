@@ -60,6 +60,23 @@ generation:
   tone: warm, concise, professional, not salesy
   word_limit: 120          # keep cold emails short
 
+# --- Per-person web research (Claude web_search) -----------------------------
+# Runs one Claude call per person; the model searches the web and returns a
+# top_hook + a fit-based target_priority + flags, judged against campaign_brief.
+# This OVERRIDES the rule-based priority/flags below. Profiles are written to
+# profiles_dir as JSON and referenced from each row's Info dump.
+research:
+  model: claude-opus-4-8
+  max_searches: 5          # web_search tool max uses per person
+  max_tokens: 4096
+  profiles_dir: enrichment/profiles
+  campaign_brief: >
+    Describe who you're targeting and why, and what makes a contact High vs Med
+    vs Low priority for THIS campaign (e.g. "Marketing leaders at large credit
+    unions who own brand/analytics; High = VP+ owning brand or marketing
+    analytics, Med = AVP/manager in marketing, Low = retired or non-marketing").
+    The researcher judges fit and writes the outreach hook against this.
+
 # --- Apollo enrichment -------------------------------------------------------
 apollo:
   reveal_personal_emails: true

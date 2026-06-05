@@ -115,10 +115,10 @@ def run(args: argparse.Namespace) -> None:
         if key not in input_keys:
             records.append(dict(row))
 
-    # A bare run does find + enrich + export (the master list). The email
-    # generate/draft stages are decoupled from the master-list schema and only
-    # run when explicitly requested.
-    run_all = not (args.find or args.enrich or args.generate or args.draft)
+    # A bare run does find + enrich + research + export (the master list). The
+    # email generate/draft stages are decoupled from the master-list schema and
+    # only run when explicitly requested.
+    run_all = not (args.find or args.enrich or args.research or args.generate or args.draft)
 
     # --- Stage 0: find people ------------------------------------------------
     if run_all or args.find:
@@ -155,6 +155,13 @@ def run(args: argparse.Namespace) -> None:
             record["enriched_company_phone"] = enr.get("company_phone") or record.get("enriched_company_phone", "")
             record["apollo_status"] = enr["apollo_status"]
             _apply_priority(record, config)
+        _write_output(records, original_headers, config)
+
+    # --- Stage 1.5: research -------------------------------------------------
+    if run_all or args.research:
+        from .research import research_leads
+
+        research_leads(records, config, force=args.force)
         _write_output(records, original_headers, config)
 
     # --- Stage 2: generate ---------------------------------------------------
@@ -226,6 +233,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Lead enrichment + outreach pipeline.")
     parser.add_argument("--find", action="store_true", help="find people by company+role (Apollo search)")
     parser.add_argument("--enrich", action="store_true", help="run Apollo enrichment")
+    parser.add_argument("--research", action="store_true", help="web-research each person (top_hook, priority)")
     parser.add_argument("--generate", action="store_true", help="write outreach emails")
     parser.add_argument("--draft", action="store_true", help="create Gmail drafts")
     parser.add_argument("--force", action="store_true", help="redo completed steps")
