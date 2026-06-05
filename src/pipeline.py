@@ -19,15 +19,32 @@ import argparse
 import csv
 from pathlib import Path
 
+from . import master_list, priority
 from .config import ROOT, field, load_config, read_leads
 
+# Internal enrichment fields carried on each record across stages. The master
+# list exporter maps these onto the 15-column output schema; email/draft fields
+# (email_subject/body, draft_id) are decoupled from the master list and only
+# live in memory if those optional stages run.
 EXTRA_COLUMNS = [
+    "enriched_name",
+    "enriched_first_name",
+    "enriched_last_name",
     "enriched_email",
     "enriched_linkedin",
     "enriched_title",
+    "enriched_seniority",
+    "enriched_email_status",
     "enriched_company",
+    "enriched_company_phone",
     "apollo_id",
     "apollo_status",
+    "target_priority",
+    "flags",
+    "web_findings",
+    "top_hook",
+    "profile_path",
+    "source_note_suffix",
     "email_subject",
     "email_body",
     "gen_status",
@@ -36,8 +53,17 @@ EXTRA_COLUMNS = [
 
 
 def _key(row: dict, config: dict) -> str:
-    name = field(row, config, "name").lower()
-    company = field(row, config, "company").lower()
+    """Stable identity for a lead, robust across input rows and master rows.
+
+    Apollo person id is the strongest key; fall back to name+company, preferring
+    enriched values (present on rows re-read from the master list) over the input
+    columns.
+    """
+    apid = str(row.get("apollo_id", "")).strip()
+    if apid:
+        return f"apid:{apid}"
+    name = (row.get("enriched_name") or field(row, config, "name")).lower().strip()
+    company = (row.get("enriched_company") or field(row, config, "company")).lower().strip()
     return f"{name}|{company}"
 
 
@@ -47,17 +73,20 @@ def _load_existing(config: dict) -> dict[str, dict]:
         return {}
     with path.open(newline="") as fh:
         rows = list(csv.DictReader(fh))
-    return {_key(r, config): r for r in rows}
+    records = [master_list.from_row(r) for r in rows]
+    return {_key(r, config): r for r in records}
 
 
 def _write_output(records: list[dict], original_headers: list[str], config: dict) -> None:
-    path = ROOT / config["output_csv"]
-    path.parent.mkdir(parents=True, exist_ok=True)
-    fieldnames = original_headers + [c for c in EXTRA_COLUMNS if c not in original_headers]
-    with path.open("w", newline="") as fh:
-        writer = csv.DictWriter(fh, fieldnames=fieldnames, extrasaction="ignore")
-        writer.writeheader()
-        writer.writerows(records)
+    master_list.export(records, config)
+
+
+def _apply_priority(record: dict, config: dict) -> None:
+    """Set the rule-based priority/flags fallback. Research overrides later."""
+    title = record.get("enriched_title") or field(record, config, "role")
+    seniority = record.get("enriched_seniority", "")
+    record["target_priority"] = priority.target_priority(title, seniority, config)
+    record["flags"] = priority.flags(title, config)
 
 
 def run(args: argparse.Namespace) -> None:
@@ -86,6 +115,9 @@ def run(args: argparse.Namespace) -> None:
         if key not in input_keys:
             records.append(dict(row))
 
+    # A bare run does find + enrich + export (the master list). The email
+    # generate/draft stages are decoupled from the master-list schema and only
+    # run when explicitly requested.
     run_all = not (args.find or args.enrich or args.generate or args.draft)
 
     # --- Stage 0: find people ------------------------------------------------
@@ -111,15 +143,22 @@ def run(args: argparse.Namespace) -> None:
                 record[name_col] = enr["name"]
             # Prefer fresh match data, but keep values Find already supplied
             # (e.g. LinkedIn) when a match comes back sparse.
+            record["enriched_name"] = enr.get("name") or record.get("enriched_name", "")
+            record["enriched_first_name"] = enr.get("first_name") or record.get("enriched_first_name", "")
+            record["enriched_last_name"] = enr.get("last_name") or record.get("enriched_last_name", "")
             record["enriched_email"] = enr["email"] or record.get("enriched_email", "")
             record["enriched_linkedin"] = enr["linkedin_url"] or record.get("enriched_linkedin", "")
             record["enriched_title"] = enr["title"] or record.get("enriched_title", "")
+            record["enriched_seniority"] = enr.get("seniority") or record.get("enriched_seniority", "")
+            record["enriched_email_status"] = enr.get("email_status") or record.get("enriched_email_status", "")
             record["enriched_company"] = enr["company_enriched"] or record.get("enriched_company", "")
+            record["enriched_company_phone"] = enr.get("company_phone") or record.get("enriched_company_phone", "")
             record["apollo_status"] = enr["apollo_status"]
+            _apply_priority(record, config)
         _write_output(records, original_headers, config)
 
     # --- Stage 2: generate ---------------------------------------------------
-    if run_all or args.generate:
+    if args.generate:
         from .generate import generate_emails
 
         # Build the enrichment view each generation needs.
@@ -153,7 +192,7 @@ def run(args: argparse.Namespace) -> None:
         _write_output(records, original_headers, config)
 
     # --- Stage 3: draft ------------------------------------------------------
-    if run_all or args.draft:
+    if args.draft:
         from .deliver import create_drafts
 
         items = [

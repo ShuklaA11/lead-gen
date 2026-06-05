@@ -3,8 +3,14 @@
 # config.yaml is gitignored (it holds your campaign content).
 
 # --- Files -------------------------------------------------------------------
-input_csv: data/input.csv      # your lead list
-output_csv: data/enriched.csv  # pipeline writes results here
+input_csv: data/input.csv               # your lead list
+output_csv: data/master-lead-list.csv   # the master list (canonical output)
+
+# Override the auto-derived person_id prefix per company. The default is an
+# acronym of the company name ("Navy Federal Credit Union" -> NFCU); set an
+# explicit value here when the acronym isn't what you want.
+company_prefixes:
+  Navy Federal Credit Union: NFCU
 
 # --- CSV column mapping ------------------------------------------------------
 # Which header in your CSV maps to each concept. The setup wizard auto-detects
