@@ -71,11 +71,14 @@ research:
   max_tokens: 4096
   profiles_dir: enrichment/profiles
   campaign_brief: >
-    Describe who you're targeting and why, and what makes a contact High vs Med
-    vs Low priority for THIS campaign (e.g. "Marketing leaders at large credit
-    unions who own brand/analytics; High = VP+ owning brand or marketing
-    analytics, Med = AVP/manager in marketing, Low = retired or non-marketing").
-    The researcher judges fit and writes the outreach hook against this.
+    Targeting marketing leaders at U.S. credit unions — the people who own
+    brand, marketing strategy, marketing analytics, product marketing, and
+    digital/member-experience marketing. Priority by fit and influence:
+    High = VP and above who own brand, marketing strategy, or marketing
+    analytics; Med = AVP / Director / senior managers within marketing;
+    Low = retired or former, or non-marketing functions (lending, operations,
+    IT) and ICs with no marketing ownership. The researcher judges fit and
+    writes the outreach hook against this.
 
 # --- Apollo enrichment -------------------------------------------------------
 apollo:

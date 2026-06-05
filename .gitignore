@@ -6,6 +6,7 @@ token.json
 # Local config & campaign data (content-specific, not for the repo)
 config.yaml
 data/
+enrichment/   # generated per-person research profiles
 
 # Python
 __pycache__/
