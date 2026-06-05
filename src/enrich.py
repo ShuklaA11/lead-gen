@@ -68,16 +68,40 @@ def _detail(name: str, company: str, linkedin: str, apollo_id: str = "") -> dict
     return detail
 
 
+def _org_phone(org: dict) -> str:
+    """Best-effort company phone from an Apollo organization object.
+
+    Apollo has used several shapes over time: a plain `phone`/`sanitized_phone`
+    string, or a `primary_phone` that is either a string or a {number, ...} dict.
+    """
+    primary = org.get("primary_phone")
+    if isinstance(primary, dict):
+        primary = primary.get("number") or ""
+    return (
+        org.get("sanitized_phone")
+        or org.get("phone")
+        or (primary if isinstance(primary, str) else "")
+        or ""
+    )
+
+
 def _extract(person: dict) -> dict:
     """Pull the fields we care about out of an Apollo person object."""
     org = person.get("organization") or {}
+    first = person.get("first_name") or ""
+    last = person.get("last_name") or ""
+    name = person.get("name") or f"{first} {last}".strip()
     return {
         "email": person.get("email") or "",
-        "name": person.get("name")
-        or f"{person.get('first_name', '')} {person.get('last_name', '')}".strip(),
+        "name": name,
+        "first_name": first,
+        "last_name": last,
         "linkedin_url": person.get("linkedin_url") or "",
         "title": person.get("title") or "",
+        "seniority": person.get("seniority") or "",
+        "email_status": person.get("email_status") or "",
         "company_enriched": person.get("organization_name") or org.get("name") or "",
+        "company_phone": _org_phone(org),
         "apollo_status": "matched" if person.get("email") else "no_email",
     }
 
@@ -86,9 +110,14 @@ def _empty() -> dict:
     return {
         "email": "",
         "name": "",
+        "first_name": "",
+        "last_name": "",
         "linkedin_url": "",
         "title": "",
+        "seniority": "",
+        "email_status": "",
         "company_enriched": "",
+        "company_phone": "",
         "apollo_status": "no_match",
     }
 

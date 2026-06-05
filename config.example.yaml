@@ -58,3 +58,15 @@ generation:
 apollo:
   reveal_personal_emails: true
   batch_size: 10           # Apollo bulk_match max is 10 per call
+
+# --- Target prioritization (rule-based, no LLM) ------------------------------
+# A lead is High if its title contains any high_keyword OR its Apollo seniority
+# is in high_seniorities; Med if seniority is in med_seniorities; else Low.
+priority:
+  high_keywords: [lending, credit, risk, consumer banking]
+  high_seniorities: [c_suite, owner, founder, partner]
+  med_seniorities: [vp, director, head]
+
+# Verification flags raised from simple title heuristics.
+flags:
+  retired_keywords: [retired, former]

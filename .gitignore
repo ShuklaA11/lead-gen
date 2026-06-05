@@ -24,3 +24,7 @@ plans/
 
 # OS
 .DS_Store
+
+# scratch artifacts
+main.js
+quick_all.json
